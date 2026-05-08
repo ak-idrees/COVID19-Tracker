@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -36,7 +36,6 @@ jobs:
           docker build -t $ECR_REPOSITORY .
           echo "✅ Build successful"
 
-      # Save image for next jobs
       - name: Save Docker Image as Artifact
         run: |
           docker save $ECR_REPOSITORY | gzip > covid-tracker.tar.gz
@@ -52,7 +51,7 @@ jobs:
   test:
     name: Test Docker Image
     runs-on: ubuntu-latest
-    needs: build                    # runs after build job
+    needs: build
 
     steps:
       - name: Download Image Artifact
@@ -66,19 +65,11 @@ jobs:
 
       - name: Test Docker Image
         run: |
-          # Run container
           docker run -d --name test-container -p 8080:80 $ECR_REPOSITORY
-
-          # Wait for container to start
           sleep 5
-
-          # Test it responds with HTTP 200
           curl -f http://localhost:8080 || exit 1
-
-          # Cleanup
           docker stop test-container
           docker rm   test-container
-
           echo "✅ Test passed"
 
 
@@ -86,7 +77,7 @@ jobs:
   push:
     name: Push Image to ECR
     runs-on: ubuntu-latest
-    needs: test                     # runs after test job
+    needs: test
 
     steps:
       - name: Download Image Artifact
@@ -99,7 +90,7 @@ jobs:
           docker load < covid-tracker.tar.gz
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -112,15 +103,10 @@ jobs:
       - name: Tag & Push to ECR
         run: |
           ECR_REGISTRY=${{ steps.login-ecr.outputs.registry }}
-
-          # Tag with commit sha and latest
           docker tag $ECR_REPOSITORY $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker tag $ECR_REPOSITORY $ECR_REGISTRY/$ECR_REPOSITORY:latest
-
-          # Push both tags
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
-
           echo "✅ Pushed to ECR"
 
 
@@ -128,7 +114,7 @@ jobs:
   deploy:
     name: Deploy on EC2
     runs-on: ubuntu-latest
-    needs: push                     # runs after push job
+    needs: push
 
     steps:
       - name: Deploy on EC2
@@ -138,6 +124,11 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key:      ${{ secrets.EC2_SSH_KEY }}
           script: |
+            # Configure AWS CLI on EC2
+            aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+            aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+            aws configure set default.region ${{ secrets.AWS_REGION }}
+
             # Login to ECR
             aws ecr get-login-password --region ${{ secrets.AWS_REGION }} | \
             docker login --username AWS --password-stdin \
