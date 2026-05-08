@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
@@ -42,7 +42,7 @@ jobs:
           docker save $ECR_REPOSITORY | gzip > covid-tracker.tar.gz
 
       - name: Upload Image Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: docker-image
           path: covid-tracker.tar.gz
@@ -56,7 +56,7 @@ jobs:
 
     steps:
       - name: Download Image Artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: docker-image
 
